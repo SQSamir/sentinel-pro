@@ -1,0 +1,23 @@
+services:
+  sentinel-pro:
+    build: .
+    container_name: sentinel-pro
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - sentinel_data:/data
+      - /var/run/fail2ban/fail2ban.sock:/var/run/fail2ban/fail2ban.sock
+      - /var/log/fail2ban.log:/var/log/fail2ban.log:ro
+    ports:
+      - "127.0.0.1:8088:8088"
+    networks:
+      - web
+      - default
+
+volumes:
+  sentinel_data:
+
+networks:
+  web:
+    external: true

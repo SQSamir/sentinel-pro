@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from sentinel.db import get_db, write_audit
+from sentinel.db import get_db, write_audit, fetchone
 from .jwt import create_access_token, create_refresh_token, decode_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -26,7 +26,7 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
         raise HTTPException(status_code=401, detail="invalid_token")
 
     db = await get_db()
-    row = await db.execute_fetchone("SELECT id,username,role,disabled FROM users WHERE username=?", (username,))
+    row = await fetchone(db, "SELECT id,username,role,disabled FROM users WHERE username=?", (username,))
     await db.close()
     if not row or row["disabled"]:
         raise HTTPException(status_code=401, detail="user_not_found")
@@ -35,7 +35,7 @@ async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(securit
 @router.post("/login")
 async def login(req: LoginReq, request: Request, response: Response):
     db = await get_db()
-    row = await db.execute_fetchone("SELECT id,username,password_hash,role,disabled FROM users WHERE username=?", (req.username,))
+    row = await fetchone(db, "SELECT id,username,password_hash,role,disabled FROM users WHERE username=?", (req.username,))
     if not row or row["disabled"] or not pwd.verify(req.password, row["password_hash"]):
         await db.close()
         raise HTTPException(status_code=401, detail="invalid_credentials")

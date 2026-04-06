@@ -44,6 +44,18 @@ async def get_db():
     db.row_factory = aiosqlite.Row
     return db
 
+async def fetchone(db, query: str, params=()):
+    cur = await db.execute(query, params)
+    row = await cur.fetchone()
+    await cur.close()
+    return row
+
+async def fetchall(db, query: str, params=()):
+    cur = await db.execute(query, params)
+    rows = await cur.fetchall()
+    await cur.close()
+    return rows
+
 async def init_db():
     db = await get_db()
     await db.executescript(SCHEMA)

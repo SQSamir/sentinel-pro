@@ -5,7 +5,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from sentinel.config import settings
-from sentinel.db import init_db, get_db
+from sentinel.db import init_db, get_db, fetchone, fetchall
+import os
 from sentinel.auth.router import router as auth_router, get_current_user
 from sentinel.fail2ban.router import router as f2b_router
 from sentinel.ws.manager import manager
@@ -25,9 +26,11 @@ pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 async def startup():
     await init_db()
     db = await get_db()
-    cnt = await db.execute_fetchone("SELECT COUNT(*) c FROM users")
+    cnt = await fetchone(db, "SELECT COUNT(*) c FROM users")
     if cnt["c"] == 0:
-        await db.execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,?)", ("admin", pwd.hash("admin123"), "SUPERADMIN"))
+        admin_user = os.getenv("ADMIN_USERNAME", "admin")
+        admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
+        await db.execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,?)", (admin_user, pwd.hash(admin_pass), "SUPERADMIN"))
         await db.commit()
     await db.close()
 
@@ -42,7 +45,7 @@ async def system_health(user=Depends(get_current_user)):
 @app.get("/audit")
 async def audit(user=Depends(get_current_user)):
     db = await get_db()
-    rows = await db.execute_fetchall("SELECT * FROM audit_log ORDER BY id DESC LIMIT 500")
+    rows = await fetchall(db, "SELECT * FROM audit_log ORDER BY id DESC LIMIT 500")
     await db.close()
     return [dict(r) for r in rows]
 
