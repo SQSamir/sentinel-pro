@@ -102,6 +102,13 @@ body {
 .kpi .value { font-size: 1.3rem; font-weight: 700; margin-top: 5px; }
 
 .grid-2 { display: grid; grid-template-columns: 1.2fr .8fr; gap: 12px; }
+.stack { display: grid; gap: 12px; }
+.threat-banner {
+  border-color: #2e5b45;
+  background: linear-gradient(90deg, #0f2118, #102638, #251019);
+  color: #b7ffd8;
+  text-shadow: 0 0 8px rgba(0,255,157,.25);
+}
 #attack-map { height: 420px; border-radius: 12px; border: 1px solid #2a3b52; overflow: hidden; }
 .table { width: 100%; border-collapse: collapse; }
 .table th, .table td { border-bottom: 1px solid #25364b; padding: 8px; text-align: left; font-size: .92rem; }

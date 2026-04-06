@@ -91,7 +91,7 @@ async function dashboard() {
   const s = await api('/f2b/stats');
   if(!s) return;
 
-  const topIps = Array.isArray(s.top_ips) ? s.top_ips.slice(0, 12) : [];
+  const topIps = Array.isArray(s.top_ips) ? s.top_ips.slice(0, 15) : [];
 
   view.innerHTML = `
     <div class='kpi-grid'>
@@ -101,17 +101,28 @@ async function dashboard() {
       <div class='kpi'><div class='label'>Hits (Top IP)</div><div class='value'>${esc(topIps[0]?.[1] || 0)}</div></div>
     </div>
 
+    <div class='card threat-banner mono' id='threat-banner'>THREAT FEED: loading…</div>
+
     <div class='grid-2'>
       <div class='card'>
         <h3>Global Attack Map</h3>
         <div id='attack-map'></div>
       </div>
-      <div class='card'>
-        <h3>Top Attack Sources</h3>
-        <table class='table'>
-          <thead><tr><th>IP</th><th>Hits</th><th>Country</th></tr></thead>
-          <tbody id='top-ip-table'>${topIps.map(([ip,h])=>`<tr><td class='mono'>${esc(ip)}</td><td>${esc(h)}</td><td id='c_${esc(ip).replace(/[^a-zA-Z0-9]/g,'_')}'>…</td></tr>`).join('')}</tbody>
-        </table>
+      <div class='stack'>
+        <div class='card'>
+          <h3>Top Attack Sources</h3>
+          <table class='table'>
+            <thead><tr><th>IP</th><th>Hits</th><th>Country</th></tr></thead>
+            <tbody id='top-ip-table'>${topIps.map(([ip,h])=>`<tr><td class='mono'>${esc(ip)}</td><td>${esc(h)}</td><td id='c_${esc(ip).replace(/[^a-zA-Z0-9]/g,'_')}'>…</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        <div class='card'>
+          <h3>Attacks by Country</h3>
+          <table class='table'>
+            <thead><tr><th>Country</th><th>IPs</th><th>Hits</th></tr></thead>
+            <tbody id='country-table'><tr><td colspan='3'>loading…</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </div>`;
 
@@ -127,19 +138,21 @@ async function renderAttackMap(topIps) {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 6 }).addTo(mapRef);
 
   const geo = await geoBatch(topIps.map(([ip]) => ip));
+  const countryAgg = {};
 
   for (const [ip, hits] of topIps) {
     const g = geo[ip];
     const id = `c_${ip.replace(/[^a-zA-Z0-9]/g,'_')}`;
     const td = document.getElementById(id);
+    const country = (g && g.ok ? (g.country || 'Unknown') : 'Unknown');
 
-    if (!g || !g.ok) {
-      if (td) td.textContent = 'Unknown';
-      continue;
-    }
+    if (td) td.textContent = country;
 
-    if (td) td.textContent = g.country || 'Unknown';
-    if (g.lat == null || g.lon == null) continue;
+    if (!countryAgg[country]) countryAgg[country] = { ipCount: 0, hits: 0 };
+    countryAgg[country].ipCount += 1;
+    countryAgg[country].hits += Number(hits || 0);
+
+    if (!g || !g.ok || g.lat == null || g.lon == null) continue;
 
     const radius = Math.min(20, 6 + Math.log2(Number(hits) + 1) * 2);
     L.circleMarker([g.lat, g.lon], {
@@ -148,8 +161,23 @@ async function renderAttackMap(topIps) {
       fillColor: '#ff3355',
       fillOpacity: 0.35,
       weight: 1
-    }).addTo(mapRef).bindPopup(`<b>${esc(ip)}</b><br/>${esc(g.country || 'Unknown')} / ${esc(g.city || '-')}<br/>hits: ${esc(hits)}`);
+    }).addTo(mapRef).bindPopup(`<b>${esc(ip)}</b><br/>${esc(country)} / ${esc(g.city || '-')}<br/>hits: ${esc(hits)}`);
   }
+
+  const rows = Object.entries(countryAgg)
+    .sort((a,b) => b[1].hits - a[1].hits)
+    .map(([country, v]) => `<tr><td>${esc(country)}</td><td>${esc(v.ipCount)}</td><td>${esc(v.hits)}</td></tr>`)
+    .join('');
+  const ctb = document.getElementById('country-table');
+  if (ctb) ctb.innerHTML = rows || `<tr><td colspan='3'>No data</td></tr>`;
+
+  const feed = Object.entries(countryAgg)
+    .sort((a,b) => b[1].hits - a[1].hits)
+    .slice(0,5)
+    .map(([c,v]) => `${c}: ${v.hits} hits / ${v.ipCount} IPs`)
+    .join('  |  ');
+  const banner = document.getElementById('threat-banner');
+  if (banner) banner.textContent = `THREAT FEED: ${feed || 'no active intel'}`;
 }
 
 async function jails() {
