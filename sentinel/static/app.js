@@ -2,6 +2,8 @@ let token = null;
 let role = null;
 const view = document.getElementById('view');
 
+const pages = { dashboard, jails, bans, whitelist, config, logs, audit, sessions, health };
+
 async function api(path, opts = {}) {
   opts.headers = opts.headers || {};
   if (token) opts.headers['Authorization'] = `Bearer ${token}`;
@@ -16,21 +18,35 @@ async function api(path, opts = {}) {
   return body;
 }
 
-function esc(s){return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
+function esc(s){return (s||'').toString().replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));}
+
+function setActive(btn){
+  document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
 
 async function showLogin() {
-  view.innerHTML = `<div class='card'><h3>Login</h3><input id='u' placeholder='username' value='admin'><br><br><input id='p' placeholder='password' type='password'><br><br><button id='l'>Login</button></div>`;
+  view.innerHTML = `<div class='card' style='max-width:420px'>
+    <h3>Login</h3>
+    <div class='row' style='grid-template-columns:1fr'>
+      <input id='u' placeholder='username' value='admin'>
+      <input id='p' placeholder='password' type='password'>
+      <button class='action' id='l'>Sign in</button>
+    </div>
+  </div>`;
+  document.getElementById('who').textContent = 'guest';
+  document.getElementById('ws').textContent = 'WS: disconnected';
   document.getElementById('l').onclick = async () => {
-    const username = document.getElementById('u').value;
+    const username = document.getElementById('u').value.trim();
     const password = document.getElementById('p').value;
     const r = await fetch('/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
     const j = await r.json();
     if (!r.ok) return alert(j.detail || 'login failed');
     token = j.access_token; role = j.role;
     await me();
-    dashboard();
+    await dashboard();
     connectWS();
-  }
+  };
 }
 
 async function me() {
@@ -43,7 +59,7 @@ async function me() {
 async function dashboard() {
   const s = await api('/f2b/stats');
   if(!s) return;
-  view.innerHTML = `<div class='card'><h3>Stats</h3><pre class='mono'>${esc(JSON.stringify(s, null, 2))}</pre></div>`;
+  view.innerHTML = `<div class='card'><h3>Dashboard</h3><pre class='mono'>${esc(JSON.stringify(s, null, 2))}</pre></div>`;
 }
 
 async function jails() {
@@ -54,58 +70,105 @@ async function jails() {
 
 async function bans() {
   view.innerHTML = `<div class='card'><h3>Ban / Unban</h3>
-  <input id='jail' placeholder='jail'> <input id='ip' placeholder='ip'>
-  <button id='ban'>Ban</button> <button id='unban'>Unban</button></div>`;
+    <div class='row'>
+      <input id='jail' placeholder='jail (example: sshd)'>
+      <input id='ip' placeholder='IP'>
+      <button class='action danger' id='ban'>Ban</button>
+      <button class='action warn' id='unban'>Unban</button>
+    </div>
+  </div>`;
+
   document.getElementById('ban').onclick = async () => {
-    try { await api('/f2b/bans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jail: jail.value, ip: ip.value }) }); alert('banned'); } catch (e) { alert(e.message); }
+    const jail = document.getElementById('jail').value.trim();
+    const ip = document.getElementById('ip').value.trim();
+    try {
+      await api('/f2b/bans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jail, ip }) });
+      alert('Banned');
+    } catch (e) { alert(e.message); }
   };
+
   document.getElementById('unban').onclick = async () => {
-    try { await api(`/f2b/bans/${encodeURIComponent(jail.value)}/${encodeURIComponent(ip.value)}`, { method: 'DELETE' }); alert('unbanned'); } catch (e) { alert(e.message); }
+    const jail = document.getElementById('jail').value.trim();
+    const ip = document.getElementById('ip').value.trim();
+    try {
+      await api(`/f2b/bans/${encodeURIComponent(jail)}/${encodeURIComponent(ip)}`, { method: 'DELETE' });
+      alert('Unbanned');
+    } catch (e) { alert(e.message); }
   };
 }
 
 async function whitelist() {
   const items = await api('/f2b/whitelist') || [];
   view.innerHTML = `<div class='card'><h3>Whitelist</h3>
-    <input id='entry' placeholder='IP/CIDR'> <input id='note' placeholder='note'> <button id='add'>Add</button>
-    <pre class='mono'>${esc(JSON.stringify(items, null, 2))}</pre></div>`;
+    <div class='row'>
+      <input id='entry' placeholder='IP/CIDR'>
+      <input id='note' placeholder='note'>
+      <button class='action' id='add'>Add</button>
+      <div></div>
+    </div>
+    <pre class='mono'>${esc(JSON.stringify(items, null, 2))}</pre>
+  </div>`;
   document.getElementById('add').onclick = async () => {
-    try { await api('/f2b/whitelist', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ entry: entry.value, note: note.value }) }); whitelist(); } catch (e) { alert(e.message); }
+    const entry = document.getElementById('entry').value.trim();
+    const note = document.getElementById('note').value.trim();
+    try {
+      await api('/f2b/whitelist', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ entry, note }) });
+      await whitelist();
+    } catch (e) { alert(e.message); }
   };
 }
 
 async function config() {
   const c = await api('/f2b/config');
   if(!c) return;
-  view.innerHTML = `<div class='card'><h3>Config: ${esc(c.path)}</h3><textarea id='cfg' rows='18'>${esc(c.content || '')}</textarea><br><button id='save'>Save</button></div>`;
+  view.innerHTML = `<div class='card'><h3>Config Editor (${esc(c.path)})</h3>
+    <textarea id='cfg' rows='20'>${esc(c.content || '')}</textarea><br><br>
+    <button class='action' id='save'>Save</button>
+  </div>`;
+
   document.getElementById('save').onclick = async () => {
-    try { await api('/f2b/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: document.getElementById('cfg').value }) }); alert('saved'); } catch (e) { alert(e.message); }
+    try {
+      await api('/f2b/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: document.getElementById('cfg').value }) });
+      alert('Saved');
+    } catch (e) { alert(e.message); }
   };
 }
 
 async function logs() {
   const l = await api('/f2b/logs?limit=300');
   if(!l) return;
-  view.innerHTML = `<div class='card'><h3>Logs</h3><a href='/f2b/logs/export' target='_blank'>Export logs</a><pre class='mono'>${esc((l.items || []).join('\n'))}</pre></div>`;
+  view.innerHTML = `<div class='card'><h3>Log Analyzer</h3>
+    <a href='/f2b/logs/export' target='_blank'>Export logs</a>
+    <pre class='mono'>${esc((l.items || []).join('\n'))}</pre>
+  </div>`;
 }
 
 async function audit() {
   const a = await api('/audit?limit=300');
   if(!a) return;
-  view.innerHTML = `<div class='card'><h3>Audit</h3><a href='/audit/export' target='_blank'>Export NDJSON</a><pre class='mono'>${esc(JSON.stringify(a, null, 2))}</pre></div>`;
+  view.innerHTML = `<div class='card'><h3>Audit Log</h3>
+    <a href='/audit/export' target='_blank'>Export NDJSON</a>
+    <pre class='mono'>${esc(JSON.stringify(a, null, 2))}</pre>
+  </div>`;
 }
 
 async function sessions() {
   const s = await api('/auth/sessions');
   if(!s) return;
-  view.innerHTML = `<div class='card'><h3>Sessions</h3><button id='lo'>Logout all sessions</button><pre class='mono'>${esc(JSON.stringify(s, null, 2))}</pre></div>`;
-  document.getElementById('lo').onclick = async () => { await api('/auth/logout-all', { method: 'POST' }); alert('revoked all'); };
+  view.innerHTML = `<div class='card'><h3>Sessions</h3>
+    <button class='action warn' id='lo'>Logout all sessions</button>
+    <pre class='mono'>${esc(JSON.stringify(s, null, 2))}</pre>
+  </div>`;
+  document.getElementById('lo').onclick = async () => {
+    await api('/auth/logout-all', { method: 'POST' });
+    alert('All sessions revoked');
+  };
 }
 
 async function health() {
   const h = await api('/system/health');
   if(!h) return;
-  view.innerHTML = `<div class='card'><h3>Health</h3><pre class='mono'>${esc(JSON.stringify(h, null, 2))}</pre></div>`;
+  view.innerHTML = `<div class='card'><h3>System Health</h3><pre class='mono'>${esc(JSON.stringify(h, null, 2))}</pre></div>`;
 }
 
 function connectWS() {
@@ -117,11 +180,24 @@ function connectWS() {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'log') {
       const pre = document.querySelector('#view pre.mono');
-      if (pre && pre.textContent.length < 100000) pre.textContent += `\n${msg.line}`;
+      if (pre && pre.textContent.length < 200000) pre.textContent += `\n${msg.line}`;
     }
   };
 }
 
-document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => ({ dashboard, jails, bans, whitelist, config, logs, audit, sessions, health }[b.dataset.view]()));
-document.getElementById('logout').onclick = async () => { await fetch('/auth/logout', { method: 'POST' }); token = null; showLogin(); };
+document.querySelectorAll('[data-view]').forEach(b => {
+  b.onclick = async () => {
+    setActive(b);
+    const fn = pages[b.dataset.view];
+    if (fn) await fn();
+  };
+});
+
+document.getElementById('logout').onclick = async () => {
+  await fetch('/auth/logout', { method: 'POST' });
+  token = null;
+  role = null;
+  await showLogin();
+};
+
 showLogin();

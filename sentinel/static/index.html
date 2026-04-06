@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -7,28 +7,45 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-<div class="app">
+<div class="app-shell">
   <aside class="sidebar">
-    <h1>SENTINEL PRO</h1>
-    <button data-view="dashboard">Dashboard</button>
-    <button data-view="jails">Jails</button>
-    <button data-view="bans">Ban/Unban</button>
-    <button data-view="whitelist">Whitelist</button>
-    <button data-view="config">Config</button>
-    <button data-view="logs">Logs</button>
-    <button data-view="audit">Audit</button>
-    <button data-view="sessions">Sessions</button>
-    <button data-view="health">Health</button>
-    <button id="logout">Logout</button>
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div>
+        <h1>SENTINEL PRO</h1>
+        <p>fail2ban control panel</p>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button data-view="dashboard" class="nav-btn active">Dashboard</button>
+      <button data-view="jails" class="nav-btn">Jails</button>
+      <button data-view="bans" class="nav-btn">Ban / Unban</button>
+      <button data-view="whitelist" class="nav-btn">Whitelist</button>
+      <button data-view="config" class="nav-btn">Config Editor</button>
+      <button data-view="logs" class="nav-btn">Log Analyzer</button>
+      <button data-view="audit" class="nav-btn">Audit Log</button>
+      <button data-view="sessions" class="nav-btn">Sessions</button>
+      <button data-view="health" class="nav-btn">System Health</button>
+    </nav>
+
+    <button id="logout" class="logout-btn">Logout</button>
   </aside>
-  <main>
-    <header>
-      <span id="who"></span>
-      <span id="ws">WS: disconnected</span>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="badge mono" id="who">guest</span>
+      </div>
+      <div class="topbar-right">
+        <span class="badge" id="ws">WS: disconnected</span>
+      </div>
     </header>
-    <section id="view"></section>
+
+    <section id="view" class="content"></section>
   </main>
 </div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>
