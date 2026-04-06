@@ -1,0 +1,9 @@
+:root{--bg:#0c0f14;--panel:#151a22;--text:#d8e0ea;--ok:#00ff9d;--ban:#ff3355;--unban:#00b4ff;--warn:#ff9f1a}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.sidebar{background:#10151d;padding:16px;display:flex;flex-direction:column;gap:10px;border-right:1px solid #283241}
+button{background:#1e2836;color:#e7f0fb;border:1px solid #344357;padding:10px;border-radius:8px;cursor:pointer}
+header{display:flex;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #283241}
+#view{padding:20px}
+.card{background:var(--panel);border:1px solid #2a3647;border-radius:12px;padding:14px;margin-bottom:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
