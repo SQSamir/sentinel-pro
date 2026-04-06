@@ -1,6 +1,9 @@
 let token = sessionStorage.getItem('sentinel_token') || null;
 let role = null;
+let mapRef = null;
+let wsRef = null;
 const view = document.getElementById('view');
+const body = document.body;
 
 const pages = { dashboard, jails, bans, whitelist, config, logs, audit, sessions, health };
 
@@ -22,7 +25,7 @@ async function api(path, opts = {}, retried = false) {
     if (!retried && await tryRefreshToken()) return api(path, opts, true);
     sessionStorage.removeItem('sentinel_token');
     token = null;
-    await showLogin();
+    setLogged(false);
     return null;
   }
   const ct = r.headers.get('content-type') || '';
@@ -38,25 +41,30 @@ function setActive(btn){
   if(btn) btn.classList.add('active');
 }
 
-async function showLogin() {
-  view.innerHTML = `<div class='card' style='max-width:420px'>
-    <h3>Login</h3>
-    <div class='row' style='grid-template-columns:1fr'>
-      <input id='u' placeholder='username' value='admin'>
-      <input id='p' placeholder='password' type='password'>
-      <button class='action' id='l'>Sign in</button>
-    </div>
-  </div>`;
-  document.getElementById('who').textContent = 'guest';
-  document.getElementById('ws').textContent = 'WS: disconnected';
+function setLogged(isLogged){
+  body.classList.toggle('logged-in', !!isLogged);
+  body.classList.toggle('logged-out', !isLogged);
+  if (!isLogged) {
+    document.getElementById('who').textContent = 'guest';
+    document.getElementById('ws').textContent = 'WS: disconnected';
+    document.getElementById('p').value = '';
+  }
+}
+
+async function bindLogin() {
   document.getElementById('l').onclick = async () => {
     const username = document.getElementById('u').value.trim();
     const password = document.getElementById('p').value;
-    const r = await fetch('/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
+    const r = await fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
     const j = await r.json();
     if (!r.ok) return alert(j.detail || 'login failed');
     token = j.access_token; role = j.role;
     sessionStorage.setItem('sentinel_token', token);
+    setLogged(true);
     await me();
     await dashboard();
     connectWS();
@@ -70,10 +78,81 @@ async function me() {
   document.getElementById('who').textContent = `${m.username} (${m.role})`;
 }
 
+async function geoIP(ip) {
+  const key = `geo_${ip}`;
+  const c = sessionStorage.getItem(key);
+  if (c) return JSON.parse(c);
+  try {
+    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`);
+    const j = await r.json();
+    if (!j.success || !j.latitude || !j.longitude) return null;
+    const out = {
+      ip,
+      country: j.country || 'Unknown',
+      city: j.city || '-',
+      lat: Number(j.latitude),
+      lon: Number(j.longitude)
+    };
+    sessionStorage.setItem(key, JSON.stringify(out));
+    return out;
+  } catch { return null; }
+}
+
 async function dashboard() {
   const s = await api('/f2b/stats');
   if(!s) return;
-  view.innerHTML = `<div class='card'><h3>Dashboard</h3><pre class='mono'>${esc(JSON.stringify(s, null, 2))}</pre></div>`;
+
+  const topIps = Array.isArray(s.top_ips) ? s.top_ips.slice(0, 12) : [];
+
+  view.innerHTML = `
+    <div class='kpi-grid'>
+      <div class='kpi'><div class='label'>Total Bans</div><div class='value'>${esc(s.total_bans)}</div></div>
+      <div class='kpi'><div class='label'>Tracked Jails</div><div class='value'>${esc((s.top_jails||[]).length)}</div></div>
+      <div class='kpi'><div class='label'>Top Attacker IP</div><div class='value mono'>${esc(topIps[0]?.[0] || '-')}</div></div>
+      <div class='kpi'><div class='label'>Hits (Top IP)</div><div class='value'>${esc(topIps[0]?.[1] || 0)}</div></div>
+    </div>
+
+    <div class='grid-2'>
+      <div class='card'>
+        <h3>Global Attack Map</h3>
+        <div id='attack-map'></div>
+      </div>
+      <div class='card'>
+        <h3>Top Attack Sources</h3>
+        <table class='table'>
+          <thead><tr><th>IP</th><th>Hits</th><th>Country</th></tr></thead>
+          <tbody id='top-ip-table'>${topIps.map(([ip,h])=>`<tr><td class='mono'>${esc(ip)}</td><td>${esc(h)}</td><td id='c_${esc(ip).replace(/[^a-zA-Z0-9]/g,'_')}'>…</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  await renderAttackMap(topIps);
+}
+
+async function renderAttackMap(topIps) {
+  const mapEl = document.getElementById('attack-map');
+  if (!mapEl || typeof L === 'undefined') return;
+  if (mapRef) { mapRef.remove(); mapRef = null; }
+
+  mapRef = L.map('attack-map', { worldCopyJump: true }).setView([25, 15], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 6 }).addTo(mapRef);
+
+  for (const [ip, hits] of topIps) {
+    const g = await geoIP(ip);
+    if (!g) continue;
+    const radius = Math.min(20, 6 + Math.log2(Number(hits) + 1) * 2);
+    L.circleMarker([g.lat, g.lon], {
+      radius,
+      color: '#ff3355',
+      fillColor: '#ff3355',
+      fillOpacity: 0.35,
+      weight: 1
+    }).addTo(mapRef).bindPopup(`<b>${esc(ip)}</b><br/>${esc(g.country)} / ${esc(g.city)}<br/>hits: ${esc(hits)}`);
+
+    const id = `c_${ip.replace(/[^a-zA-Z0-9]/g,'_')}`;
+    const td = document.getElementById(id);
+    if (td) td.textContent = g.country;
+  }
 }
 
 async function jails() {
@@ -196,11 +275,12 @@ async function health() {
 }
 
 function connectWS() {
+  if (wsRef) try { wsRef.close(); } catch {}
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws/events?token=${encodeURIComponent(token)}`);
-  ws.onopen = () => document.getElementById('ws').textContent = 'WS: connected';
-  ws.onclose = () => document.getElementById('ws').textContent = 'WS: disconnected';
-  ws.onmessage = (ev) => {
+  wsRef = new WebSocket(`${proto}://${location.host}/ws/events?token=${encodeURIComponent(token)}`);
+  wsRef.onopen = () => document.getElementById('ws').textContent = 'WS: connected';
+  wsRef.onclose = () => document.getElementById('ws').textContent = 'WS: disconnected';
+  wsRef.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'log') {
       const pre = document.querySelector('#view pre.mono');
@@ -222,16 +302,18 @@ document.getElementById('logout').onclick = async () => {
   token = null;
   role = null;
   sessionStorage.removeItem('sentinel_token');
-  await showLogin();
+  setLogged(false);
 };
 
 (async () => {
+  await bindLogin();
   if (!token) await tryRefreshToken();
   if (token) {
+    setLogged(true);
     await me();
     await dashboard();
     connectWS();
   } else {
-    await showLogin();
+    setLogged(false);
   }
 })();

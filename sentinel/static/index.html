@@ -4,10 +4,29 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>SENTINEL PRO</title>
-  <link rel="stylesheet" href="/static/style.css?v=20260406c" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="/static/style.css?v=20260406e" />
 </head>
-<body>
-<div class="app-shell">
+<body class="logged-out">
+<div id="login-screen" class="login-screen">
+  <div class="login-card card">
+    <div class="brand login-brand">
+      <div class="brand-dot"></div>
+      <div>
+        <h1>SENTINEL PRO</h1>
+        <p>fail2ban security operations panel</p>
+      </div>
+    </div>
+    <h3>Login</h3>
+    <div class="row" style="grid-template-columns:1fr">
+      <input id="u" placeholder="username" value="admin">
+      <input id="p" placeholder="password" type="password">
+      <button class="action" id="l">Sign in</button>
+    </div>
+  </div>
+</div>
+
+<div class="app-shell auth-only">
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-dot"></div>
@@ -46,6 +65,7 @@
   </main>
 </div>
 
-<script src="/static/app.js?v=20260406c"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="/static/app.js?v=20260406e"></script>
 </body>
 </html>
