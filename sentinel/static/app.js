@@ -69,9 +69,17 @@ async function jails() {
 }
 
 async function bans() {
+  const jailResp = await api('/f2b/jails');
+  if (!jailResp) return;
+  const jails = Array.isArray(jailResp.jails) ? jailResp.jails : [];
+
+  const options = jails.length
+    ? jails.map(j => `<option value="${esc(j)}">${esc(j)}</option>`).join('')
+    : `<option value="">(no jails found)</option>`;
+
   view.innerHTML = `<div class='card'><h3>Ban / Unban</h3>
     <div class='row'>
-      <input id='jail' placeholder='jail (example: sshd)'>
+      <select id='jail'>${options}</select>
       <input id='ip' placeholder='IP'>
       <button class='action danger' id='ban'>Ban</button>
       <button class='action warn' id='unban'>Unban</button>
@@ -81,6 +89,7 @@ async function bans() {
   document.getElementById('ban').onclick = async () => {
     const jail = document.getElementById('jail').value.trim();
     const ip = document.getElementById('ip').value.trim();
+    if (!jail || !ip) return alert('Jail və IP daxil et');
     try {
       await api('/f2b/bans', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jail, ip }) });
       alert('Banned');
@@ -90,6 +99,7 @@ async function bans() {
   document.getElementById('unban').onclick = async () => {
     const jail = document.getElementById('jail').value.trim();
     const ip = document.getElementById('ip').value.trim();
+    if (!jail || !ip) return alert('Jail və IP daxil et');
     try {
       await api(`/f2b/bans/${encodeURIComponent(jail)}/${encodeURIComponent(ip)}`, { method: 'DELETE' });
       alert('Unbanned');

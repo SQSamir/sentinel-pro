@@ -76,7 +76,7 @@ body {
 .card h3 { margin: 0 0 12px; }
 
 .row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; }
-input, textarea {
+input, textarea, select {
   width: 100%; background: #0c1420; color: var(--text);
   border: 1px solid #30445f; border-radius: 10px;
   padding: 10px;
