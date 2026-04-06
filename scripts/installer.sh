@@ -38,4 +38,4 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now sentinel-panel.service
 
 echo "Installed. Open: http://SERVER_IP:8088"
-echo "Default admin login: admin / admin123 (change immediately)"
+echo "Default admin login: admin / admin (change immediately)"

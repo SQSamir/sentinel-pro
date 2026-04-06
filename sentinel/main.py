@@ -34,7 +34,7 @@ async def startup():
     cnt = await fetchone(db, "SELECT COUNT(*) c FROM users")
     if cnt["c"] == 0:
         admin_user = os.getenv("ADMIN_USERNAME", "admin")
-        admin_pass = os.getenv("ADMIN_PASSWORD", "admin123")
+        admin_pass = os.getenv("ADMIN_PASSWORD", "admin")
         await db.execute("INSERT INTO users(username,password_hash,role) VALUES(?,?,?)", (admin_user, pwd.hash(admin_pass), "SUPERADMIN"))
         await db.commit()
     await db.close()
