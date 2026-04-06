@@ -1,7 +1,9 @@
 import asyncio
 import json
 import os
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+import ipaddress
+import httpx
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, PlainTextResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -25,6 +27,7 @@ app.include_router(auth_router)
 app.include_router(f2b_router)
 app.mount("/static", StaticFiles(directory="sentinel/static"), name="static")
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_geo_cache: dict[str, dict] = {}
 
 
 @app.on_event("startup")
@@ -76,6 +79,46 @@ async def audit_export(user=Depends(get_current_user)):
     await db.close()
     lines = [json.dumps(dict(r), ensure_ascii=False) for r in rows]
     return PlainTextResponse("\n".join(lines), media_type="application/x-ndjson")
+
+
+@app.get("/intel/geo")
+async def intel_geo(ips: str = Query("", description="comma-separated ip list"), user=Depends(get_current_user)):
+    out = []
+    ip_list = [x.strip() for x in (ips or "").split(",") if x.strip()]
+    ip_list = ip_list[:30]
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for ip in ip_list:
+            try:
+                ipaddress.ip_address(ip)
+            except Exception:
+                out.append({"ip": ip, "ok": False, "country": "Unknown"})
+                continue
+
+            if ip in _geo_cache:
+                out.append(_geo_cache[ip])
+                continue
+
+            rec = {"ip": ip, "ok": False, "country": "Unknown"}
+            try:
+                r = await client.get(f"https://ipwho.is/{ip}")
+                j = r.json()
+                if j.get("success"):
+                    rec = {
+                        "ip": ip,
+                        "ok": True,
+                        "country": j.get("country") or "Unknown",
+                        "city": j.get("city") or "-",
+                        "lat": j.get("latitude"),
+                        "lon": j.get("longitude"),
+                    }
+            except Exception:
+                pass
+
+            _geo_cache[ip] = rec
+            out.append(rec)
+
+    return {"items": out}
 
 
 @app.websocket("/ws/events")

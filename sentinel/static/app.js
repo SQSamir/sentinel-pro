@@ -78,24 +78,13 @@ async function me() {
   document.getElementById('who').textContent = `${m.username} (${m.role})`;
 }
 
-async function geoIP(ip) {
-  const key = `geo_${ip}`;
-  const c = sessionStorage.getItem(key);
-  if (c) return JSON.parse(c);
-  try {
-    const r = await fetch(`https://ipwho.is/${encodeURIComponent(ip)}`);
-    const j = await r.json();
-    if (!j.success || !j.latitude || !j.longitude) return null;
-    const out = {
-      ip,
-      country: j.country || 'Unknown',
-      city: j.city || '-',
-      lat: Number(j.latitude),
-      lon: Number(j.longitude)
-    };
-    sessionStorage.setItem(key, JSON.stringify(out));
-    return out;
-  } catch { return null; }
+async function geoBatch(ips) {
+  if (!ips?.length) return {};
+  const q = encodeURIComponent(ips.join(','));
+  const r = await api(`/intel/geo?ips=${q}`);
+  const m = {};
+  for (const it of (r?.items || [])) m[it.ip] = it;
+  return m;
 }
 
 async function dashboard() {
@@ -137,9 +126,21 @@ async function renderAttackMap(topIps) {
   mapRef = L.map('attack-map', { worldCopyJump: true }).setView([25, 15], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 6 }).addTo(mapRef);
 
+  const geo = await geoBatch(topIps.map(([ip]) => ip));
+
   for (const [ip, hits] of topIps) {
-    const g = await geoIP(ip);
-    if (!g) continue;
+    const g = geo[ip];
+    const id = `c_${ip.replace(/[^a-zA-Z0-9]/g,'_')}`;
+    const td = document.getElementById(id);
+
+    if (!g || !g.ok) {
+      if (td) td.textContent = 'Unknown';
+      continue;
+    }
+
+    if (td) td.textContent = g.country || 'Unknown';
+    if (g.lat == null || g.lon == null) continue;
+
     const radius = Math.min(20, 6 + Math.log2(Number(hits) + 1) * 2);
     L.circleMarker([g.lat, g.lon], {
       radius,
@@ -147,11 +148,7 @@ async function renderAttackMap(topIps) {
       fillColor: '#ff3355',
       fillOpacity: 0.35,
       weight: 1
-    }).addTo(mapRef).bindPopup(`<b>${esc(ip)}</b><br/>${esc(g.country)} / ${esc(g.city)}<br/>hits: ${esc(hits)}`);
-
-    const id = `c_${ip.replace(/[^a-zA-Z0-9]/g,'_')}`;
-    const td = document.getElementById(id);
-    if (td) td.textContent = g.country;
+    }).addTo(mapRef).bindPopup(`<b>${esc(ip)}</b><br/>${esc(g.country || 'Unknown')} / ${esc(g.city || '-')}<br/>hits: ${esc(hits)}`);
   }
 }
 
