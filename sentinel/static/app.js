@@ -1,14 +1,27 @@
-let token = null;
+let token = sessionStorage.getItem('sentinel_token') || null;
 let role = null;
 const view = document.getElementById('view');
 
 const pages = { dashboard, jails, bans, whitelist, config, logs, audit, sessions, health };
 
-async function api(path, opts = {}) {
+async function tryRefreshToken() {
+  const r = await fetch('/auth/refresh', { method: 'POST' });
+  if (!r.ok) return false;
+  const j = await r.json();
+  if (!j?.access_token) return false;
+  token = j.access_token;
+  sessionStorage.setItem('sentinel_token', token);
+  return true;
+}
+
+async function api(path, opts = {}, retried = false) {
   opts.headers = opts.headers || {};
   if (token) opts.headers['Authorization'] = `Bearer ${token}`;
   const r = await fetch(path, opts);
   if (r.status === 401) {
+    if (!retried && await tryRefreshToken()) return api(path, opts, true);
+    sessionStorage.removeItem('sentinel_token');
+    token = null;
     await showLogin();
     return null;
   }
@@ -43,6 +56,7 @@ async function showLogin() {
     const j = await r.json();
     if (!r.ok) return alert(j.detail || 'login failed');
     token = j.access_token; role = j.role;
+    sessionStorage.setItem('sentinel_token', token);
     await me();
     await dashboard();
     connectWS();
@@ -207,7 +221,17 @@ document.getElementById('logout').onclick = async () => {
   await fetch('/auth/logout', { method: 'POST' });
   token = null;
   role = null;
+  sessionStorage.removeItem('sentinel_token');
   await showLogin();
 };
 
-showLogin();
+(async () => {
+  if (!token) await tryRefreshToken();
+  if (token) {
+    await me();
+    await dashboard();
+    connectWS();
+  } else {
+    await showLogin();
+  }
+})();
